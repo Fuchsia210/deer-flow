@@ -1,14 +1,15 @@
----
+***
+
 name: hospital-report
 description: |
-  处理东方医院影像报告，将中文内容翻译成英文，并生成格式化的Word文档。
-  使用场景：
-  1. 用户发送东方医院影像报告的图片时
-  2. 用户要求翻译之前收到的图片并生成Word文档时
-  3. 用户提供包含影像报告数据的JSON文件时
+处理东方医院影像报告，将中文内容翻译成英文，并生成格式化的Word文档。
+使用场景：
 
-  此技能使用 MiniMax 理解图片内容，提取报告数据，翻译为英文，并使用 `scripts/main.py` 生成Word文档。
----
+1. 用户发送东方医院影像报告的图片时
+2. 用户要求翻译之前收到的图片并生成Word文档时
+3. 用户提供包含影像报告数据的JSON文件时
+
+## 此技能使用 MiniMax 理解图片内容，提取报告数据，翻译为英文，并使用 `scripts/main.py` 生成Word文档。
 
 # 东方医院影像报告Word版生成器
 
@@ -17,29 +18,23 @@ description: |
 ## 工作流程
 
 ### 1. 提取报告数据
-根据用户提供的输入类型处理：
 
-**如果用户提供图片：**
-- 使用 `MiniMax_understand_image` 读取图片信息，提取影像报告的所有内容
-```json
-{
-  "image_source": "/mnt/user-data/uploads/my_image.png"
-}
-```
-- 将提取的内容整理为标准JSON格式（见下方JSON结构）
+- 先使用`view-image`技能获取图片的url
+- 将url作为输入传递给`MiniMax_understand_image` 读取图片信息
 
-**如果用户提供JSON文件：**
-- 直接使用该JSON文件作为输入
+### 2. 整理json并翻译
 
-### 2. 翻译为英文
-将中文内容翻译成英文，使用医学领域的专业术语。
+- 将中文内容翻译成英文，使用医学领域的专业术语,
+- 将提取的内容整理为标准中英文对照JSON格式（见下方JSON结构）
 
 **注意事项：**
+
 - 英文 `EXAMINATION TYPE` 从以下选项中选取：X RAY；PLAIN MRI；CONTRAST ENHANCED MRI；PLAIN CT SCAN；CONTRAST ENHANCED CT SCAN
 - 英文 `GENDER` 从以下选项中选取：Male；Female
 - 除字段说明特别申明的以外，中文内容必须完全遵照原文，英文使用医学领域的专业术语
 
 ### 3. 生成Word文档
+
 使用 `scripts/main.py` 脚本生成Word文档：
 
 ```bash
@@ -47,12 +42,14 @@ python scripts/main.py <json_file_path>
 ```
 
 **脚本说明：**
+
 - 脚本位于 `scripts/main.py`
 - 输入：包含报告数据的JSON文件路径
 - 输出：生成的Word文档保存到 `DOWNLOADS_DIR` 目录（在脚本中配置）
 - 文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
 
 ### 4. 发送文档给用户
+
 生成完成后，将Word文档发送给用户。
 
 ## JSON结构
@@ -154,17 +151,20 @@ python scripts/main.py <json_file_path>
 此脚本接收JSON文件作为输入，生成格式化的Word文档。
 
 **功能：**
+
 - 基于 `assets/sample.docx` 模板创建文档
 - 保留页眉页脚
 - 使用英文数据填充报告内容
 - 生成文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
 
 **使用方法：**
+
 ```bash
 python scripts/main.py <json_file_path>
 ```
 
 **配置：**
+
 - `SAMPLE_DOCX_PATH`：模板文档路径（默认：`../assets/sample.docx`）
 - `DOWNLOADS_DIR`：输出目录（默认：`C:\Users\ayl13\.openclaw\media\outbound`）
 
@@ -184,3 +184,4 @@ python scripts/main.py <json_file_path>
 - 确保 `assets/sample.docx` 模板文件存在
 - 确保 `DOWNLOADS_DIR` 目录存在且有写入权限
 - 生成的Word文档使用英文数据，格式为标准的放射学报告
+
