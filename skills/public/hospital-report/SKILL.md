@@ -11,7 +11,8 @@ description: 处理东方医院影像报告，将中文内容翻译成英文，�
 
 ### 1. 提取报告数据
 
-- 将刚刚上传图片的url作为输入传递给`MiniMax_understand_image` 读取图片信息
+- 使用`view-image`工具处理图片获取image_url信息
+- 将获取的image_url信息作为输入传递给`MiniMax_understand_image` 理解图片内容
 
 ### 2. 整理json并翻译
 
