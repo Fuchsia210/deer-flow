@@ -114,6 +114,14 @@ class PatchedChatMiniMax(ChatOpenAI):
             }
         else:
             payload["extra_body"] = {"reasoning_split": True}
+        
+        # 确保所有 user 消息的 name 字段一致，避免 MiniMax API 的 "user name must be consistent" 错误
+        messages = payload.get("messages", [])
+        for msg in messages:
+            # 移除 name 字段，保持一致性
+            if isinstance(msg, dict) and "name" in msg:
+                del msg["name"]
+        
         return payload
 
     def _convert_chunk_to_generation_chunk(
