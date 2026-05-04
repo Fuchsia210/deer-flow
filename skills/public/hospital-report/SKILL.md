@@ -30,14 +30,14 @@ description: 处理东方医院影像报告，将中文内容翻译成英文，�
 使用 `scripts/main.py` 脚本生成Word文档：
 
 ```bash
-python scripts/main.py <json_file_path>
+python scripts/main.py --json-file <json_file_path> --output-dir <output_directory>
 ```
 
 **脚本说明：**
 
 - 脚本位于 `scripts/main.py`
-- 输入：包含报告数据的JSON文件路径
-- 输出：生成的Word文档保存到 `DOWNLOADS_DIR` 目录（在脚本中配置）
+- `--json-file`：包含报告数据的JSON文件路径（建议使用 `/mnt/user-data/workspace/`）
+- `--output-dir`：生成的Word文档保存目录（建议使用 `/mnt/user-data/outputs/`）
 - 文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
 
 ### 4. 发送文档给用户
@@ -158,15 +158,19 @@ python scripts/main.py <json_file_path>
 **配置：**
 
 - `SAMPLE_DOCX_PATH`：模板文档路径（默认：`../assets/sample.docx`）
-- `DOWNLOADS_DIR`：输出目录（默认：`C:\Users\ayl13\.openclaw\media\outbound`）
 
 ## 完整执行步骤
 
 1. **接收用户输入**：确认用户提供了影像报告图片或JSON文件
 2. **提取/接收数据**：使用MiniMax理解图片或直接使用JSON文件
 3. **整理为标准格式**：确保JSON包含所有必需字段
-4. **保存JSON文件**：将JSON数据保存到临时文件
-5. **调用脚本**：运行 `python scripts/main.py <json_file_path>`
+4. **保存JSON文件**：将JSON数据保存到 `/mnt/user-data/workspace/` 目录
+5. **调用脚本**：运行脚本生成Word文档
+   ```bash
+   python scripts/main.py \
+     --json-file /mnt/user-data/workspace/report.json \
+     --output-dir /mnt/user-data/outputs/
+   ```
 6. **获取输出**：脚本会打印生成的文档路径
 7. **发送给用户**：将生成的Word文档发送给用户
 
@@ -174,6 +178,6 @@ python scripts/main.py <json_file_path>
 
 - 脚本需要 `python-docx` 库支持
 - 确保 `assets/sample.docx` 模板文件存在
-- 确保 `DOWNLOADS_DIR` 目录存在且有写入权限
 - 生成的Word文档使用英文数据，格式为标准的放射学报告
+- 输出目录会通过命令行参数 `--output-dir` 指定，如果不存在会自动创建
 
