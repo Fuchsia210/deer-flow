@@ -146,7 +146,7 @@ def open_upload_file_no_symlink(base_dir: Path, filename: str) -> tuple[Path, ob
         flags |= os.O_NONBLOCK
 
     try:
-        fd = os.open(dest, flags, 0o600)
+        fd = os.open(dest, flags, 0o666)
     except OSError as exc:
         if exc.errno in {errno.ELOOP, errno.EISDIR, errno.ENOTDIR, errno.ENXIO, errno.EAGAIN}:
             raise UnsafeUploadPathError(f"Unsafe upload destination: {safe_name}") from exc
