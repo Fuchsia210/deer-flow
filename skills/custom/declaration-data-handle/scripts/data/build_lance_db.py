@@ -3,6 +3,7 @@ import csv
 import os
 import sys
 import argparse
+import shutil
 import lancedb
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -37,17 +38,20 @@ def main():
     # 连接 LanceDB
     db = lancedb.connect(persist_directory)
     
-    # 检查表是否已存在
-    table_exists = table_name in db.list_tables()
-    
-    if table_exists:
+    # 检查表是否已存在，如果存在则删除
+    if table_name in db.list_tables():
         table = db.open_table(table_name)
         count = len(table)
-        print(f"\n表 '{table_name}' 已存在，当前有 {count} 条记录")
-        response = input("是否要更新表？(y/n): ").strip().lower()
-        if response != 'y':
-            print("操作已取消。")
-            sys.exit(0)
+        print(f"\n表 '{table_name}' 已存在（{count} 条记录），正在删除...")
+        db.drop_table(table_name)
+        # 强制删除表目录（确保文件系统层面也删除）
+        table_dir = os.path.join(persist_directory, f"{table_name}.lance")
+        if os.path.exists(table_dir):
+            shutil.rmtree(table_dir)
+            print(f"✓ 表目录已删除: {table_dir}")
+        print(f"✓ 表 '{table_name}' 已删除")
+        # 重新连接数据库
+        db = lancedb.connect(persist_directory)
     
     # 读取 CSV
     print(f"\n读取 CSV 文件...")
@@ -77,10 +81,6 @@ def main():
         vector_fields.append('英文描述')
     if '品名' in fieldnames:
         vector_fields.append('品名')
-    if '申报要素' in fieldnames:
-        vector_fields.append('申报要素')
-    if '税号' in fieldnames:
-        vector_fields.append('税号')
     
     print(f"向量化使用字段: {', '.join(vector_fields)}")
     print("\n正在加载嵌入模型 (all-MiniLM-L6-v2)...")
@@ -126,10 +126,15 @@ def main():
     for i, item in enumerate(data):
         item["vector"] = embeddings[i].tolist()
     
-    # 如果表已存在，先删除旧表
-    if table_exists:
-        print(f"\n删除旧表...")
+    # 确保表不存在，如果存在则再次删除
+    if table_name in db.list_tables():
+        print("警告: 表仍然存在，再次删除...")
         db.drop_table(table_name)
+        # 强制删除表目录
+        table_dir = os.path.join(persist_directory, f"{table_name}.lance")
+        if os.path.exists(table_dir):
+            shutil.rmtree(table_dir)
+        db = lancedb.connect(persist_directory)
     
     # 创建新表并添加数据
     print(f"\n正在导入 {len(data)} 条记录...")

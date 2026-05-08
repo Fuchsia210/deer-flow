@@ -15,6 +15,20 @@ DOCKER_DIR="$PROJECT_ROOT/docker"
 # Docker Compose command with project name
 COMPOSE_CMD="docker compose -p deer-flow-dev -f docker-compose-dev.yaml"
 
+# Load environment variables from .env file
+load_env_file() {
+    local env_file="$PROJECT_ROOT/.env"
+    if [ -f "$env_file" ]; then
+        set -a  # Automatically export all variables assigned
+        source "$env_file"
+        set +a
+        echo -e "${BLUE}✓ Loaded environment from .env file${NC}"
+    fi
+}
+
+# Call load_env_file at script startup
+load_env_file
+
 detect_sandbox_mode() {
     local config_file="$PROJECT_ROOT/config.yaml"
     local sandbox_use=""

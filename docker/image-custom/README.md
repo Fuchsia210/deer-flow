@@ -5,7 +5,7 @@
 ## 目录结构
 
 ```
-docker/custom-sandbox/
+docker/image-custom/
 ├── Dockerfile           # 自定义sandbox镜像
 ├── README.md            # 本文件
 ├── build.sh             # 快速构建脚本
@@ -17,14 +17,17 @@ docker/custom-sandbox/
 本镜像预装了以下Skills所需的依赖：
 
 ### 1. hospital-report
+
 处理东方医院影像报告，翻译并生成Word文档。
 
 ### 2. declaration-data-handle
+
 处理报关资料压缩包，提取数据并生成报关单Excel。
 
 ## 预装的依赖
 
 ### 核心依赖
+
 - `python-docx` - Word文档生成 (hospital-report)
 - `openpyxl` - Excel文件处理 (declaration-data-handle)
 - `Pillow` - 图片处理
@@ -32,11 +35,13 @@ docker/custom-sandbox/
 - `pandas` - 数据处理
 
 ### 向量数据库依赖 (declaration-data-handle)
+
 - `lancedb` - 向量数据库
 - `sentence-transformers` - 文本嵌入模型
 - `torch` - PyTorch深度学习框架
 
 ### 模糊匹配依赖 (declaration-data-handle)
+
 - `fuzzywuzzy` - 模糊字符串匹配
 - `python-Levenshtein` - Levenshtein距离算法
 
@@ -45,7 +50,7 @@ docker/custom-sandbox/
 ### 步骤1：构建自定义镜像
 
 ```bash
-cd /home/ayl13/deer-flow/docker/custom-sandbox
+cd /home/ayl13/deer-flow/docker/image-custom
 
 # 使用清华镜像源构建（推荐国内用户）
 docker build -t deer-flow-sandbox:custom \
@@ -97,3 +102,4 @@ docker run --rm deer-flow-sandbox:custom python -c "import fuzzywuzzy; print('fu
 docker run --rm deer-flow-sandbox:custom python -c "import lancedb; print('lancedb OK')"
 docker run --rm deer-flow-sandbox:custom python -c "import sentence_transformers; print('sentence-transformers OK')"
 ```
+

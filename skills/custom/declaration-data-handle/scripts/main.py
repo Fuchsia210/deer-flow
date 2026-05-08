@@ -163,7 +163,14 @@ def get_embedding_model():
     """获取或初始化嵌入模型"""
     global _embedding_model
     if _embedding_model is None:
-        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        try:
+            log_message("正在加载嵌入模型 (all-MiniLM-L6-v2)...")
+            _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            log_message("✓ 嵌入模型加载成功")
+        except Exception as e:
+            log_message(f"加载嵌入模型失败: {e}", "ERROR")
+            log_message("请确保模型已正确下载到缓存目录", "ERROR")
+            raise
     return _embedding_model
 
 
