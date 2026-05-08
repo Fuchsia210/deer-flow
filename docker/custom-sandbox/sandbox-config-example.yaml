@@ -1,0 +1,30 @@
+# Sandbox 配置示例
+# 复制此内容到 config.yaml 中的 sandbox 部分
+
+sandbox:
+  # 使用 AioSandboxProvider（Docker容器模式）
+  use: deerflow.community.aio_sandbox:AioSandboxProvider
+
+  # 自定义sandbox镜像（预装了hospital-report和declaration-data-handle所需的依赖）
+  image: deer-flow-sandbox:custom
+
+  # 预热容器数量（建议设为3）
+  replicas: 3
+
+  # 空闲超时时间（秒），设为较长值避免容器被销毁
+  idle_timeout: 3600
+
+  # 基础端口
+  port: 8080
+
+  # 容器名称前缀
+  container_prefix: deer-flow-sandbox
+
+  # 环境变量
+  environment:
+    PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+
+  # 工具输出截断限制
+  bash_output_max_chars: 20000
+  read_file_output_max_chars: 50000
+  ls_output_max_chars: 20000
