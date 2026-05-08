@@ -21,10 +21,13 @@ except ImportError:
 
 # 尝试导入向量数据库
 try:
-    import chromadb
-    CHROMADB_AVAILABLE = True
+    import lancedb
+    from sentence_transformers import SentenceTransformer
+    LANCEDB_AVAILABLE = True
+    # 预加载模型
+    _embedding_model = None
 except ImportError:
-    CHROMADB_AVAILABLE = False
+    LANCEDB_AVAILABLE = False
 
 # 预编译正则表达式，提高性能
 PLACEHOLDER_PATTERN = re.compile(r'\{([^}]+)\}')
@@ -156,14 +159,22 @@ def reorder_results_with_keyword_match(results, search_text, text_field_names):
     }
 
 
+def get_embedding_model():
+    """获取或初始化嵌入模型"""
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _embedding_model
+
+
 def query_from_db(persist_directory, collection_name, query_text=None, filter_conditions=None, 
                   n_results=10, strict_match_fields=None):
     """
     通用的向量数据库查询函数
     
     参数:
-        persist_directory: ChromaDB 持久化目录路径
-        collection_name: 集合名称
+        persist_directory: LanceDB 持久化目录路径
+        collection_name: 表名称
         query_text: 查询文本（用于向量搜索）
         filter_conditions: 过滤条件字典，格式为 {field_name: value}
         n_results: 返回结果数量（默认10）
@@ -172,114 +183,136 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
     返回:
         查询结果字典，格式为 {'ids': [...], 'documents': [...], 'metadatas': [...], 'distances': [...]}
     """
-    import shutil
-    import tempfile
+    db = lancedb.connect(persist_directory)
     
-    # 处理只读挂载的情况：将向量数据库复制到临时可写目录
-    temp_dir = None
     try:
-        # 检查源目录是否存在
-        if not os.path.exists(persist_directory):
-            log_message(f"向量数据库目录不存在: {persist_directory}", "WARNING")
-            return None
-        
-        # 尝试在临时目录创建副本
-        temp_dir = tempfile.mkdtemp(prefix="chromadb_")
-        log_message(f"将向量数据库复制到临时目录: {temp_dir}", "INFO")
-        
-        # 复制数据库文件
-        shutil.copytree(persist_directory, temp_dir, dirs_exist_ok=True)
-        
-        # 使用临时目录创建客户端
-        client = chromadb.PersistentClient(path=temp_dir)
-        
-        try:
-            collection = client.get_collection(name=collection_name)
-        except Exception as e:
-            log_message(f"集合 '{collection_name}' 不存在: {e}", "WARNING")
-            return None
-        
-        results = None
-        
-        # 如果有过滤条件，先进行过滤
-        if filter_conditions and len(filter_conditions) > 0:
-            all_items = collection.get()
-            filtered_ids = []
-            filtered_docs = []
-            filtered_metas = []
-            
-            for i, meta in enumerate(all_items['metadatas']):
-                match = True
-                for key, value in filter_conditions.items():
-                    meta_value = meta.get(key, '') if meta else ''
-                    
-                    # 严格匹配字段：双向包含检查
-                    if strict_match_fields and key in strict_match_fields:
-                        if not meta_value or (str(value).lower() not in str(meta_value).lower() and str(meta_value).lower() not in str(value).lower()):
-                            match = False
-                            break
-                    # 非严格匹配字段：不做过滤（留给向量搜索）
-                    else:
-                        pass
-                
-                if match:
-                    filtered_ids.append(all_items['ids'][i])
-                    filtered_docs.append(all_items['documents'][i])
-                    filtered_metas.append(meta)
-            
-            if filtered_ids:
-                # 使用唯一的临时集合名称，避免冲突
-                temp_collection_name = f"temp_search_filter_{uuid.uuid4().hex[:8]}"
-                
-                temp_collection = client.create_collection(name=temp_collection_name)
-                temp_collection.add(
-                    documents=filtered_docs,
-                    metadatas=filtered_metas,
-                    ids=filtered_ids
-                )
-                
-                if query_text:
-                    results = temp_collection.query(
-                        query_texts=[query_text],
-                        n_results=n_results
-                    )
-                else:
-                    # 没有查询文本，直接返回所有过滤结果
-                    results = {
-                        'ids': [filtered_ids],
-                        'documents': [filtered_docs],
-                        'metadatas': [filtered_metas],
-                        'distances': None
-                    }
-                
-                client.delete_collection(name=temp_collection_name)
-            else:
-                log_message("  没有找到匹配的过滤条件项目，搜索所有项目...", "INFO")
-                if query_text:
-                    results = collection.query(
-                        query_texts=[query_text],
-                        n_results=n_results
-                    )
-        else:
-            # 没有过滤条件，直接查询
-            if query_text:
-                results = collection.query(
-                    query_texts=[query_text],
-                    n_results=n_results
-                )
-        
-        return results
+        table = db.open_table(collection_name)
     except Exception as e:
-        log_message(f"向量数据库查询失败: {e}", "ERROR")
+        print(f"Error: Table '{collection_name}' not found.")
         return None
-    finally:
-        # 清理临时目录
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-                log_message(f"已清理临时目录: {temp_dir}", "INFO")
-            except Exception as e:
-                log_message(f"清理临时目录失败: {e}", "WARNING")
+    
+    # 如果有过滤条件，先进行过滤
+    if filter_conditions and len(filter_conditions) > 0:
+        # 获取所有数据进行过滤
+        all_items = table.to_pandas()
+        filtered_items = []
+        
+        for _, row in all_items.iterrows():
+            match = True
+            for key, value in filter_conditions.items():
+                meta_value = str(row.get(key, ''))
+                
+                # 严格匹配字段：双向包含检查
+                if strict_match_fields and key in strict_match_fields:
+                    if not meta_value or (str(value).lower() not in meta_value.lower() and meta_value.lower() not in str(value).lower()):
+                        match = False
+                        break
+            
+            if match:
+                filtered_items.append(row)
+        
+        if filtered_items:
+            # 如果有查询文本，进行向量搜索
+            if query_text:
+                model = get_embedding_model()
+                query_vector = model.encode(query_text).tolist()
+                
+                # 使用LanceDB的向量搜索
+                results_df = table.search(query_vector).limit(n_results).to_pandas()
+                
+                # 应用过滤条件
+                if strict_match_fields and filter_conditions:
+                    mask = []
+                    for _, row in results_df.iterrows():
+                        item_match = True
+                        for key, value in filter_conditions.items():
+                            if key in strict_match_fields:
+                                meta_value = str(row.get(key, ''))
+                                if not meta_value or (str(value).lower() not in meta_value.lower() and meta_value.lower() not in str(value).lower()):
+                                    item_match = False
+                                    break
+                        mask.append(item_match)
+                    results_df = results_df[mask]
+                
+                # 转换为ChromaDB兼容格式
+                ids = results_df['id'].tolist()
+                documents = results_df['document'].tolist()
+                # 将所有其他列作为metadata
+                metadatas = []
+                for _, row in results_df.iterrows():
+                    meta = row.drop(['id', 'document', 'vector']).to_dict()
+                    metadatas.append(meta)
+                distances = results_df['_distance'].tolist() if '_distance' in results_df.columns else None
+                
+                results = {
+                    'ids': [ids],
+                    'documents': [documents],
+                    'metadatas': [metadatas],
+                    'distances': [distances] if distances else None
+                }
+            else:
+                # 没有查询文本，直接返回所有过滤结果
+                ids = [item['id'] for item in filtered_items]
+                documents = [item['document'] for item in filtered_items]
+                metadatas = []
+                for item in filtered_items:
+                    meta = {k: v for k, v in item.items() if k not in ['id', 'document', 'vector']}
+                    metadatas.append(meta)
+                
+                results = {
+                    'ids': [ids],
+                    'documents': [documents],
+                    'metadatas': [metadatas],
+                    'distances': None
+                }
+        else:
+            print("  No items found matching filter criteria. Searching all items...")
+            if query_text:
+                model = get_embedding_model()
+                query_vector = model.encode(query_text).tolist()
+                results_df = table.search(query_vector).limit(n_results).to_pandas()
+                
+                ids = results_df['id'].tolist()
+                documents = results_df['document'].tolist()
+                metadatas = []
+                for _, row in results_df.iterrows():
+                    meta = row.drop(['id', 'document', 'vector']).to_dict()
+                    metadatas.append(meta)
+                distances = results_df['_distance'].tolist() if '_distance' in results_df.columns else None
+                
+                results = {
+                    'ids': [ids],
+                    'documents': [documents],
+                    'metadatas': [metadatas],
+                    'distances': [distances] if distances else None
+                }
+            else:
+                results = None
+    else:
+        # 没有过滤条件，直接查询
+        if query_text:
+            model = get_embedding_model()
+            query_vector = model.encode(query_text).tolist()
+            results_df = table.search(query_vector).limit(n_results).to_pandas()
+            
+            ids = results_df['id'].tolist()
+            documents = results_df['document'].tolist()
+            metadatas = []
+            for _, row in results_df.iterrows():
+                meta = row.drop(['id', 'document', 'vector']).to_dict()
+                metadatas.append(meta)
+            distances = results_df['_distance'].tolist() if '_distance' in results_df.columns else None
+            
+            results = {
+                'ids': [ids],
+                'documents': [documents],
+                'metadatas': [metadatas],
+                'distances': [distances] if distances else None
+            }
+        else:
+            results = None
+    
+    return results
 
 
 def log_message(message, level="INFO"):
@@ -645,14 +678,14 @@ def get_value_from_merged_data(merged_data, field_path):
 
 def query_product_info(manufacturer=None, english_desc=None, script_dir=None):
     """从向量数据库查询产品信息"""
-    if not CHROMADB_AVAILABLE:
+    if not LANCEDB_AVAILABLE:
         log_message("向量数据库不可用，跳过产品查询", "WARNING")
         return None
 
     if not script_dir:
         script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    persist_directory = os.path.join(script_dir, 'chroma_db')
+    persist_directory = os.path.join(script_dir, 'lance_db')
 
     if not os.path.exists(persist_directory):
         log_message(f"向量数据库目录不存在: {persist_directory}", "WARNING")

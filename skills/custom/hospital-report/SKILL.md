@@ -1,50 +1,48 @@
----
+***
+
 name: hospital-report
-description: 处理东方医院影像报告，将中文内容翻译成英文，并生成格式化的Word文档,使用场景1. 用户发送东方医院影像报告的图片时;2. 用户要求翻译之前收到的图片并生成Word文档时;3. 用户提供包含影像报告数据的JSON文件时
----
+description: |-
+处理东方医院影像报告，将中文内容翻译成英文，并生成格式化的Word文档。
+使用场景：
+
+1. 用户发送东方医院影像报告的图片时
+2. 用户要求翻译之前收到的图片并生成Word文档时
+3. 用户提供包含影像报告数据的JSON文件时
+
+***
 
 # 东方医院影像报告Word版生成器
 
-此技能用于处理东方医院影像报告，提取相关数据，翻译成英文，并生成格式化的Word文档。
+此技能用于处理东方医院影像报告，提取数据、翻译成英文并生成格式化的Word文档。
 
-## 工作流程
+## Architecture
 
-### 1. 提取报告数据
-
-- 使用`view-image`工具处理图片获取image_url信息
-- 将获取的image_url信息作为输入传递给`MiniMax_understand_image` 理解图片内容
-
-### 2. 整理json并翻译
-
-- 将中文内容翻译成英文，使用医学领域的专业术语,
-- 将提取的内容整理为标准中英文对照JSON格式（见下方JSON结构）
-
-**注意事项：**
-
-- 英文 `EXAMINATION TYPE` 从以下选项中选取：X RAY；PLAIN MRI；CONTRAST ENHANCED MRI；PLAIN CT SCAN；CONTRAST ENHANCED CT SCAN
-- 英文 `GENDER` 从以下选项中选取：Male；Female
-- 除字段说明特别申明的以外，中文内容必须完全遵照原文，英文使用医学领域的专业术语
-
-### 3. 生成Word文档
-
-使用 `scripts/main.py` 脚本生成Word文档：
-
-```bash
-python scripts/main.py --json-file <json_file_path> --output-dir <output_directory>
+```
+hospital-report/
+├── SKILL.md                          ← You are here. Core logic and flow.
+├── assets/
+│   └── sample.docx                   ← Word文档模板
+└── scripts/
+    └── main.py                       ← 主脚本，生成Word文档
 ```
 
-**脚本说明：**
+## Ground Rules
 
-- 脚本位于 `scripts/main.py`
-- `--json-file`：包含报告数据的JSON文件路径（建议使用 `/mnt/user-data/workspace/`）
-- `--output-dir`：生成的Word文档保存目录（建议使用 `/mnt/user-data/outputs/`）
-- 文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
+- **医学术语准确。** 使用专业医学领域术语进行翻译。
+- **原文内容完整保留。** 中文内容必须完全遵照原文。
+- **枚举值从指定选项选取。** 确保 EXAMINATION TYPE 和 GENDER 符合要求。
+- **保持专业、规范的格式。**
 
-### 4. 发送文档给用户
+## Workflow Phases
 
-生成完成后，将Word文档发送给用户。
+| Phase            | Goal          | Key Actions                |
+| ---------------- | ------------- | -------------------------- |
+| **1. 提取报告数据**    | 理解图片内容        | 使用 image tools 处理图片，提取报告内容,**如果minimax的MCP图形理解工具可用，则将刚刚拿到的url作为入参，重新传入图形理解工具，再次解析图片内容** |
+| **2. 整理JSON并翻译** | 生成标准中英文对照JSON | 整理内容为JSON格式，翻译成英文          |
+| **3. 生成Word文档**  | 生成格式化Word     | 运行 main.py 脚本              |
+| **4. 发送文档给用户**   | 交付结果          | 将生成的Word文档发送给用户            |
 
-## JSON结构
+## JSON Structure
 
 生成的JSON必须包含以下字段：
 
@@ -83,23 +81,14 @@ python scripts/main.py --json-file <json_file_path> --output-dir <output_directo
 }
 ```
 
-### 字段说明
+### Field Notes
 
-- `EXAMINATION TYPE`：影像类型，例如：X光，MRI增强等
-- `NAME`：患者姓名
-- `MRN`：放射检查编号
-- `DOB`：出生日期
-- `GENDER`：性别
-- `AGE`：年龄
-- `RADIOLOGY NO`：成像编号
-- `DATE`：日期
-- `EXAMINATION SITE`：检查部位，描述影像扫描的人体部位，例如：1. 胸部正位； 2. 胰腺；3. 头颅常规
-- `Technique`：检查方法，描述检查是如何操作，可能只包含人体部位，也可能含有一些技术指标，例如：1. 胸部正位；2. 头颅MRI平扫，层厚5mm，层距lmm……；3. 取仰卧位，头先进机架……
-- `Findings`：放射学发现，描述检查以后发现了什么现象，例如：1. 双侧大脑半球对称，……；2.肝脏形态，大小正常……
-- `Impressions`：放射学诊断，描述发现的问题或者未发现问题，可以是字符串或字符串数组
-- `REPORTING PHYSICIAN`：报告医生
+- `EXAMINATION TYPE`：英文从以下选项选取：X RAY；PLAIN MRI；CONTRAST ENHANCED MRI；PLAIN CT SCAN；CONTRAST ENHANCED CT SCAN
+- `GENDER`：英文从以下选项选取：Male；Female
+- `Impressions`：可以是字符串或字符串数组
+- 除字段说明特别申明的以外，中文内容必须完全遵照原文，英文使用医学领域的专业术语
 
-### JSON样例
+### JSON Example
 
 ```json
 {
@@ -136,48 +125,42 @@ python scripts/main.py --json-file <json_file_path> --output-dir <output_directo
 }
 ```
 
-## 脚本使用说明
+## Script Usage
 
-### scripts/main.py
+使用 `scripts/main.py` 生成Word文档：
 
-此脚本接收JSON文件作为输入，生成格式化的Word文档。
+```bash
+python skills/custom/hospital-report/scripts/main.py \
+  --json-file /mnt/user-data/workspace/report.json \
+  --output-dir /mnt/user-data/outputs/
+```
 
-**功能：**
+**脚本说明：**
+
+- `--json-file`：包含报告数据的JSON文件路径（建议使用 `/mnt/user-data/workspace/`）
+- `--output-dir`：生成的Word文档保存目录（建议使用 `/mnt/user-data/outputs/`）
+- 文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
+
+**脚本功能：**
 
 - 基于 `assets/sample.docx` 模板创建文档
 - 保留页眉页脚
 - 使用英文数据填充报告内容
-- 生成文件名格式：`{MRN}_{NAME}_{timestamp}.docx`
+- 自动创建输出目录（如果不存在）
 
-**使用方法：**
-
-```bash
-python scripts/main.py <json_file_path>
-```
-
-**配置：**
-
-- `SAMPLE_DOCX_PATH`：模板文档路径（默认：`../assets/sample.docx`）
-
-## 完整执行步骤
+## Complete Execution Steps
 
 1. **接收用户输入**：确认用户提供了影像报告图片或JSON文件
-2. **提取/接收数据**：使用MiniMax理解图片或直接使用JSON文件
+2. **提取/接收数据**：理解图片内容或直接使用JSON文件
 3. **整理为标准格式**：确保JSON包含所有必需字段
 4. **保存JSON文件**：将JSON数据保存到 `/mnt/user-data/workspace/` 目录
 5. **调用脚本**：运行脚本生成Word文档
-   ```bash
-   python scripts/main.py \
-     --json-file /mnt/user-data/workspace/report.json \
-     --output-dir /mnt/user-data/outputs/
-   ```
 6. **获取输出**：脚本会打印生成的文档路径
 7. **发送给用户**：将生成的Word文档发送给用户
 
-## 注意事项
+## Notes
 
 - 脚本需要 `python-docx` 库支持
 - 确保 `assets/sample.docx` 模板文件存在
 - 生成的Word文档使用英文数据，格式为标准的放射学报告
-- 输出目录会通过命令行参数 `--output-dir` 指定，如果不存在会自动创建
 

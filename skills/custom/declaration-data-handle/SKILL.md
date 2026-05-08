@@ -1,34 +1,55 @@
 ---
 name: declaration-data-handle
-description: |
+description: |-
+  处理报关资料压缩包，解压后将文件转为 Markdown，通过 Agent 分析提取数据，最终生成报关单 Excel 文件。
   触发场景：
   1. 用户发送包含报关资料的压缩包时
   2. 用户要求处理之前收到的压缩包时
-
-  功能：解压报关资料压缩包，使用 markitdown 将文件转为 Markdown 格式，通过 Agent 分析提取数据，生成报关单 Excel 文件。
+  依赖环境：
+  - Python 依赖：torch, lancedb, sentence-transformers, openpyxl, fuzzywuzzy, pandas
+  - 向量数据库：skills/custom/declaration-data-handle/scripts/lance_db/product_library.lance
 ---
 
 # 报关单生成器
 
-## 完整流程
+此技能用于处理报关资料，解压文件、分析内容、提取数据并生成报关单 Excel。
 
-### 步骤 1: 复制文件到工作区
+## Architecture
 
-将报关资料压缩包移动到 `/mnt/user-data/workspace` 目录：
-```bash
-mv {原文件路径} /mnt/user-data/workspace/
+```
+declaration-data-handle/
+├── SKILL.md                          ← You are here. Core logic and flow.
+└── scripts/
+    ├── main.py                       ← 主脚本，整合数据并生成 Excel
+    ├── assets/
+    │   └── 报关单.xlsx               ← 报关单模板
+    ├── data/
+    │   ├── product_library.csv       ← 产品库数据
+    │   └── build_lance_db.py         ← 重建向量数据库脚本
+    └── lance_db/
+        └── product_library.lance/    ← 向量数据库（LanceDB）
 ```
 
-### 步骤 2: 解压缩文件
+## Ground Rules
 
-使用系统命令解压缩文件到 `/tmp/declaration_extract` 目录：
-- `.zip`: `unzip /mnt/user-data/workspace/{文件名} -d /tmp/declaration_extract`
-- `.rar`: `unrar x /mnt/user-data/workspace/{文件名} /tmp/declaration_extract/`
-- `.7z`: `7z x /mnt/user-data/workspace/{文件名} -o/tmp/declaration_extract`
+- **严格按步骤执行。** 一步一个脚印，不要跳过流程。
+- **数据准确性优先。** 严格从原文提取，不编造内容，数字保持原样。
+- **缺失字段直接省略。** 不要留空字符串或 null。
+- **英文内容保持原样。** 不要翻译。
 
-### 步骤 3: Agent 分析每个文件
+## Workflow Phases
 
-**逐个读取 Markdown 文件，让 Agent 按照以下 JSON Schema 分析：**
+| Phase | Goal | Key Actions |
+|-------|------|-------------|
+| **1. 准备文件** | 将压缩包移动到工作区并解压 | 移动文件到 `/mnt/user-data/workspace`，解压到 `/tmp/declaration_extract` |
+| **2. 转换格式** | 将文件转为 Markdown | Agent 将文件转为 Markdown，**Excel 文件每个 sheet 单独转换为一个 MD 文件** |
+| **3. Agent 分析** | 提取报关数据 | 逐个分析文件，按 JSON Schema 提取数据 |
+| **4. 生成报关单** | 整合数据生成 Excel | 运行 main.py 脚本 |
+| **5. 交付文件** | 发送给用户 | 将生成的 Excel 文件发送给用户 |
+
+## JSON Schema for Analysis
+
+每个文件分析后需按以下 JSON 格式输出：
 
 ```json
 {
@@ -101,35 +122,11 @@ mv {原文件路径} /mnt/user-data/workspace/
 }
 ```
 
-**重要：**
-- 严格从原文提取，不编造内容
-- 数字保持原样，不转换格式
-- 缺失的字段直接省略，不要留空字符串或 null
-- 英文内容保持原样，不要翻译
-
-### 步骤 4: 运行脚本整合生成报关单
-
-将所有文件的分析结果保存为 JSON 数组，然后运行脚本：
-
-```bash
-python skills/custom/declaration-data-handle/scripts/main.py \
-  --analysis-results /path/to/analysis_results.json \
-  --output-dir /mnt/user-data/outputs
-```
-
-或者，如果分析结果在内存中，直接以 JSON 字符串形式传递：
-
-```bash
-python skills/custom/declaration-data-handle/scripts/main.py \
-  --analysis-json '{JSON字符串}' \
-  --output-dir /mnt/user-data/outputs
-```
-
-**分析结果格式说明：**
+## Analysis Results Format
 
 分析结果可以是以下任一格式：
 
-1. **数组格式（推荐）**：
+### 1. 数组格式（推荐）
 ```json
 [
   {
@@ -148,7 +145,7 @@ python skills/custom/declaration-data-handle/scripts/main.py \
 ]
 ```
 
-2. **单个对象格式**：
+### 2. 单个对象格式
 ```json
 {
   "FileName": "文件名",
@@ -157,48 +154,64 @@ python skills/custom/declaration-data-handle/scripts/main.py \
 }
 ```
 
-**企业默认值处理：**
+## Data Merging Rules
+
+### 企业默认值处理
 - 当 `FileBusinessType` 为 `'企业默认值'` 时，其商品数据会作为默认值应用到所有商品
 - 对于每个商品，如果某个字段缺失，会自动从企业默认值中填充
 
-**发票作为基准：**
+### 发票作为基准
 - 当 `FileBusinessType` 为 `'发票'` 时，作为商品基准
 - 其他单证的商品数据通过 `Description` 进行模糊匹配（相似度阈值 70%）合并到基准中
 
-**合并数据特点：**
+### 合并数据特点
 - 每个字段的值都保留来源文件的 GUID 溯源信息
 - 支持多个来源的数据合并，相同字段值去重
 - 支持下拉框选择多值，不同来源值用颜色标记（蓝色=单一来源，黑色=多来源一致，红色=多来源不一致）
 
-参数说明：
-- `--analysis-results`: 分析结果 JSON 文件路径
-- `--analysis-json`: 分析结果 JSON 字符串（替代 --analysis-results）
-- `--output-dir`: 输出目录，默认 `/mnt/user-data/outputs`
-- `--with-source`: 可选，打包时包含原始文件
-- `--template-path`: 可选，报关单模板路径
+## Script Usage
 
-### 步骤 5: 发送文件给用户
+运行 `scripts/main.py` 生成报关单：
 
-将生成的报关单 Excel 或压缩包发送给用户。
+```bash
+python scripts/main.py \
+  --analysis-results /path/to/analysis_results.json \
+  --output-dir /mnt/user-data/outputs \
+  --template-path scripts/assets/报关单.xlsx
+```
 
-## 注意事项
+或者使用 JSON 字符串：
 
-- 使用 conda Python 3.12 环境运行脚本
-- 确保 markitdown 已安装（用于文件转 Markdown）
-- 报关单模板默认路径：`skills/custom/declaration-data-handle/scripts/assets/报关单.xlsx`
-- 向量数据库路径：`skills/custom/declaration-data-handle/scripts/chroma_db`（用于查询商品税号、品名、申报要素）
-- 产品库数据：`skills/custom/declaration-data-handle/scripts/data/product_library.csv`
+```bash
+python scripts/main.py \
+  --analysis-json '[{"FileName": "xxx.pdf", ...}]' \
+  --output-dir /mnt/user-data/outputs
+```
 
-### 重建向量数据库
+**参数说明：**
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--analysis-results` | 分析结果 JSON 文件路径 | - |
+| `--analysis-json` | 分析结果 JSON 字符串（替代 --analysis-results） | - |
+| `--output-dir` | 输出目录 | `/mnt/user-data/outputs` |
+| `--template-path` | 报关单模板路径 | `scripts/assets/报关单.xlsx` |
+
+**依赖检查：**
+- 如果 `lancedb` 和 `sentence-transformers` 未安装，向量检索功能将被禁用
+- 如果 `openpyxl` 未安装，将无法生成 Excel 文件
+
+## Rebuild Vector Database
 
 如果需要更新或重建向量数据库，运行：
 
 ```bash
-cd skills/custom/declaration-data-handle/scripts/data
-python build_chroma_db.py
+cd scripts/data
+python build_lance_db.py
 ```
 
 脚本会：
 1. 读取 `product_library.csv`
-2. 将数据导入到 `../chroma_db/product_library` 集合
+2. 将数据导入到 `../lance_db/product_library.lance` 数据库
 3. 使用 `英文描述`、`品名`、`申报要素`、`税号` 字段进行向量化
+
+**依赖：** `lancedb`, `sentence-transformers`
