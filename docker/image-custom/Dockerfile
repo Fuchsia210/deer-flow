@@ -22,6 +22,16 @@ RUN echo "Installing pre-cached Python packages for hospital-report and declarat
     torch==2.11.0 \
     && echo "Pre-cached packages installed successfully"
 
+# 安装飞书和其他即时通讯依赖
+RUN echo "Installing IM channel dependencies (Feishu, Slack, Telegram, WeCom, DingTalk)..." && \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" \
+    lark-oapi>=1.4.0 \
+    slack-sdk>=3.33.0 \
+    python-telegram-bot>=21.0 \
+    wecom-aibot-python-sdk>=0.1.6 \
+    dingtalk-stream>=0.24.3 \
+    && echo "IM channel dependencies installed successfully"
+
 # 预下载 sentence transformer 模型（使用 HF 镜像加速）
 RUN echo "Pre-downloading sentence transformer model (using HF mirror)..." && \
     python -c "from sentence_transformers import SentenceTransformer; model = SentenceTransformer('all-MiniLM-L6-v2'); print('Model downloaded successfully')" && \
