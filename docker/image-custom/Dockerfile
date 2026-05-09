@@ -3,10 +3,10 @@ FROM enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox
 ARG PIP_INDEX_URL
 ARG HF_ENDPOINT_URL
 
-ENV PIP_INDEX_URL=${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+ENV PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
 ENV HF_ENDPOINT=${HF_ENDPOINT_URL:-https://hf-mirror.com}
 
-RUN echo "Installing pre-cached Python packages for hospital-report and declaration-data-handle skills..." && \
+RUN echo "Installing core Python packages..." && \
     pip install --no-cache-dir --index-url "$PIP_INDEX_URL" \
     python-docx>=1.0.0 \
     Pillow>=10.0.0 \
@@ -14,14 +14,22 @@ RUN echo "Installing pre-cached Python packages for hospital-report and declarat
     openpyxl>=3.1.0 \
     pandas>=2.0.0 \
     numpy>=1.24.0 \
+    xlrd>=2.0.0 \
+    && echo "Core packages installed"
+
+RUN echo "Installing fuzzy matching packages..." && \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" \
     fuzzywuzzy==0.18.0 \
     python-Levenshtein==0.27.3 \
     RapidFuzz==3.14.5 \
-    lancedb==0.30.2 \
-    sentence-transformers==5.4.1 \
+    && echo "Fuzzy matching packages installed"
+
+RUN echo "Installing ML packages (torch, sentence-transformers, lancedb)..." && \
+    pip install --no-cache-dir --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
     torch==2.11.0 \
-    xlrd>=2.0.0 \
-    && echo "Pre-cached packages installed successfully"
+    sentence-transformers==5.4.1 \
+    lancedb==0.30.2 \
+    && echo "ML packages installed"
 
 COPY markitdown-src /home/ayl13/markitdown
 

@@ -58,7 +58,7 @@ docker/image-custom/
 ```bash
 cd /home/ayl13/deer-flow/docker/image-custom
 
-# 使用清华镜像源构建（推荐国内用户）
+# 使用阿里云镜像源构建（推荐国内用户）
 ./build.sh
 
 # 或手动指定 markitdown 源码路径

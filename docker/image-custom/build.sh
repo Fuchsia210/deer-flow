@@ -23,12 +23,12 @@ elif [ -f "$SCRIPT_DIR/../.env" ]; then
         echo "Using PIP_INDEX_URL from .env: $PIP_INDEX_URL"
         BUILD_ARGS="--build-arg PIP_INDEX_URL=$PIP_INDEX_URL"
     else
-        echo "Using default PIP_INDEX_URL (Tsinghua mirror)"
-        BUILD_ARGS="--build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"
+        echo "Using default PIP_INDEX_URL (Aliyun mirror)"
+        BUILD_ARGS="--build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple"
     fi
 else
-    echo "Using default PIP_INDEX_URL (Tsinghua mirror)"
-    BUILD_ARGS="--build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"
+    echo "Using default PIP_INDEX_URL (Aliyun mirror)"
+    BUILD_ARGS="--build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple"
 fi
 
 MARKITDOWN_SOURCE="${MARKITDOWN_SOURCE:-/home/ayl13/markitdown}"
@@ -56,7 +56,7 @@ sandbox:
   replicas: 3
   idle_timeout: 3600
   environment:
-    PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    PIP_INDEX_URL: https://mirrors.aliyun.com/pypi/simple
 EOF
 echo ""
 

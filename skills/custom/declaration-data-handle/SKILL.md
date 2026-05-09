@@ -1,18 +1,7 @@
-***
-
+---
 name: declaration-data-handle
-description: |-
-处理报关资料压缩包，解压后将文件转为 Markdown，通过 Agent 分析提取数据，最终生成报关单 Excel 文件。
-触发场景：
-
-1. 用户发送包含报关资料的压缩包时
-2. 用户要求处理之前收到的压缩包时
-   依赖环境：
-
-- Python 依赖：torch, lancedb, sentence-transformers, openpyxl, fuzzywuzzy, pandas
-- 向量数据库：skills/custom/declaration-data-handle/scripts/lance\_db/product\_library.lance
-
-***
+description: 处理报关资料压缩包，解压后将文件转为 Markdown，通过 Agent 分析提取数据，最终生成报关单 Excel 文件。
+---
 
 # 报关单生成器
 
@@ -57,8 +46,8 @@ declaration-data-handle/
 ## Analysis Results Format
 
 - `main.py` 脚本**只接受带外层包装的数组格式**，必须是数组，每个元素必须包含：
-- `guid`：文件唯一标识符（必填，上层调用系统负责生成）
-- `analysis`：单证分析结果对象（必填，不能为 null/非字典类型）
+  - `guid`：文件唯一标识符（必填，上层调用系统负责生成）
+  - `analysis`：单证分析结果对象（必填，不能为 null/非字典类型）
 
 ```json
 [
@@ -205,13 +194,14 @@ declaration-data-handle/
 
 ### 校验规则
 
-脚本启动时会严格校验输入：
+脚本启动时会严格校验输入的 JSON 文件：
 
-- 输入必须是数组类型
-- 每个元素必须是字典
-- 每个元素必须有 `guid` 字段（不能缺失）
-- 每个元素必须有 `analysis` 字段
-- `analysis` 字段必须是字典类型
+- 解析失败（文件不存在、JSON 格式错误）→ 返回错误码 1
+- 根元素必须是**数组**
+- 数组中的**每个元素**代表一份单证分析结果，必须是**字典**
+- 每个单证字典必须有 `guid` 字段（文件唯一标识符，由上层调用系统生成，不能缺失）
+- 每个单证字典必须有 `analysis` 字段（单证分析结果对象，不能缺失）
+- `analysis` 字段必须是**字典**类型（不能为 null 或其他类型）
 - 任何一项校验不通过，脚本立即返回错误码 1 退出
 
 ## Data Merging Rules
@@ -243,20 +233,11 @@ python scripts/main.py \
   --template-path scripts/assets/报关单.xlsx
 ```
 
-或者使用 JSON 字符串：
-
-```bash
-python scripts/main.py \
-  --analysis-json '[{"FileName": "xxx.pdf", ...}]' \
-  --output-dir /mnt/user-data/outputs
-```
-
 **参数说明：**
 
 | 参数                   | 说明                                   | 默认值                       |
 | -------------------- | ------------------------------------ | ------------------------- |
-| `--analysis-results` | 分析结果 JSON 文件路径                       | -                         |
-| `--analysis-json`    | 分析结果 JSON 字符串（替代 --analysis-results） | -                         |
+| `--analysis-results` | 分析结果 JSON 文件路径（必填）                   | -                         |
 | `--output-dir`       | 输出目录                                 | `/mnt/user-data/outputs`  |
 | `--template-path`    | 报关单模板路径                              | `scripts/assets/报关单.xlsx` |
 
@@ -287,7 +268,6 @@ python scripts/filetomd.py /path/to/document.pdf
 - 自动识别所有支持格式（PDF、DOCX、XLSX、XLS、PPTX、图片等）
 - Excel 文件自动将每个 Sheet 单独保存为独立的 MD 文件
 - 输出目录自动创建，无需手动提前建立
-- 显示详细的转换进度信息
 
 ## 校验文件数量
 
