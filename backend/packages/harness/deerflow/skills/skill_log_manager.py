@@ -51,7 +51,7 @@ def parse_log_level_from_output(output: str) -> int:
 
 
 def is_error_from_output(output: str) -> bool:
-    """Check if output contains error level logs or known error patterns.
+    """Check if output contains error level logs.
     
     Args:
         output: The raw terminal output to check.
@@ -64,16 +64,7 @@ def is_error_from_output(output: str) -> bool:
     
     # Check if log level is ERROR or higher
     level = parse_log_level_from_output(output)
-    if level >= logging.ERROR:
-        return True
-    
-    # Also check for the legacy "Error:" prefix pattern for backward compatibility
-    lines = output.split("\n")
-    for line in lines:
-        if line.strip().startswith("Error:"):
-            return True
-    
-    return False
+    return level >= logging.ERROR
 
 
 class SkillLogManager:
