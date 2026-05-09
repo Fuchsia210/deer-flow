@@ -169,6 +169,12 @@ services:
     extra_hosts:
       # For Linux: map host.docker.internal to host gateway
       - "host.docker.internal:host-gateway"
+    # 添加 DNS 配置以解决飞书等外部服务的域名解析问题
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 223.5.5.5
+      - 223.6.6.6
     networks:
       - deer-flow-dev
     restart: unless-stopped
