@@ -3,17 +3,26 @@ import sys
 import json
 import datetime
 import argparse
+import logging
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 # 配置路径
 SAMPLE_DOCX_PATH = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sample.docx')
 
 # 检查样本文档是否存在
 if not os.path.exists(SAMPLE_DOCX_PATH):
-    print(f"Error: Sample document not found at {SAMPLE_DOCX_PATH}")
+    logger.error(f"Error: Sample document not found at {SAMPLE_DOCX_PATH}")
     sys.exit(1)
 
 def update_docx(json_data, output_dir: str):
@@ -133,7 +142,7 @@ def update_docx(json_data, output_dir: str):
 
     # 保存文档
     doc.save(output_path)
-    print(f"Updated document saved at {output_path}")
+    logger.info(f"Updated document saved at {output_path}")
 
 def main():
     """主函数"""
@@ -152,26 +161,26 @@ def main():
     args = parser.parse_args()
 
     json_file_path = os.path.abspath(args.json_file)
-    print(f"Processing JSON file: {json_file_path}")
+    logger.info(f"Processing JSON file: {json_file_path}")
 
     # 检查文件是否存在
     if not os.path.exists(json_file_path):
-        print(f"Error: File '{json_file_path}' not found")
+        logger.error(f"Error: File '{json_file_path}' not found")
         sys.exit(1)
 
     # 读取JSON文件
     try:
         with open(json_file_path, 'r', encoding='utf-8') as f:
             json_data = json.load(f)
-        print("Loaded JSON data:")
-        print(json.dumps(json_data, ensure_ascii=False, indent=2))
+        logger.info("Loaded JSON data:")
+        logger.info(json.dumps(json_data, ensure_ascii=False, indent=2))
     except Exception as e:
-        print(f"Error reading JSON file: {e}")
+        logger.error(f"Error reading JSON file: {e}")
         sys.exit(1)
 
     # 更新文档
     update_docx(json_data, args.output_dir)
-    print("Process completed successfully!")
+    logger.info("Process completed successfully!")
 
 if __name__ == "__main__":
     main()

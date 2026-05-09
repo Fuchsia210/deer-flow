@@ -5,11 +5,20 @@ import json
 import argparse
 import uuid
 import re
+import logging
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
 os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 from fuzzywuzzy import fuzz
 
@@ -1331,18 +1340,18 @@ def fill_declaration_excel(template_path, merged_data, output_dir, guid_to_busin
         输出文件路径或 None
     """
     if not OPENPYXL_AVAILABLE:
-        print("错误：openpyxl 未安装，无法生成 Excel 文件")
+        logger.error("错误：openpyxl 未安装，无法生成 Excel 文件")
         return None
 
     if not os.path.exists(template_path):
-        print(f"错误：模板文件不存在：{template_path}")
+        logger.error(f"错误：模板文件不存在：{template_path}")
         return None
 
-    print(f"正在创建输出目录：{output_dir}")
+    logger.info(f"正在创建输出目录：{output_dir}")
     os.makedirs(output_dir, exist_ok=True)
 
     try:
-        print(f"正在加载模板文件：{template_path}")
+        logger.info(f"正在加载模板文件：{template_path}")
         wb = openpyxl.load_workbook(template_path)
         
         # 创建辅助工作表用于存储下拉选项
@@ -1354,7 +1363,7 @@ def fill_declaration_excel(template_path, merged_data, output_dir, guid_to_busin
             if sheet.title == "_dropdown_options":
                 continue
             
-            print(f"正在处理工作表：{sheet.title}")
+            logger.info(f"正在处理工作表：{sheet.title}")
             
             # 获取制造商信息
             manufacturer = None
@@ -1521,7 +1530,7 @@ def fill_declaration_excel(template_path, merged_data, output_dir, guid_to_busin
                 dec_list_data = merged_data['DecMessage']['DecLists']['DecList']
             
             if dec_list_data:
-                print(f"正在填充 {len(dec_list_data)} 个商品项")
+                logger.info(f"正在填充 {len(dec_list_data)} 个商品项")
                 for item_idx, item in enumerate(dec_list_data):
                     base_row = 23 + 3 * item_idx
                     helper_row = fill_item_to_rows(
@@ -1546,7 +1555,7 @@ def fill_declaration_excel(template_path, merged_data, output_dir, guid_to_busin
                 
                 if start_delete_row < special_relation_row:
                     rows_to_delete = special_relation_row - start_delete_row
-                    print(f"删除 {rows_to_delete} 个多余行")
+                    logger.info(f"删除 {rows_to_delete} 个多余行")
                     
                     merged_ranges_to_remove = []
                     for merged_range in sheet.merged_cells.ranges:
@@ -1564,17 +1573,17 @@ def fill_declaration_excel(template_path, merged_data, output_dir, guid_to_busin
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         json_output_path = os.path.join(output_dir, f"declaration_merged_{timestamp}.json")
-        print(f"正在保存合并数据：{json_output_path}")
+        logger.info(f"正在保存合并数据：{json_output_path}")
         with open(json_output_path, 'w', encoding='utf-8') as f:
             json.dump(merged_data, f, ensure_ascii=False, indent=2)
         
         excel_output_path = os.path.join(output_dir, f"报关单_{timestamp}.xlsx")
-        print(f"正在保存报关单：{excel_output_path}")
+        logger.info(f"正在保存报关单：{excel_output_path}")
         wb.save(excel_output_path)
         
         return excel_output_path
     except Exception as e:
-        print(f"生成 Excel 文件时出错：{e}")
+        logger.error(f"生成 Excel 文件时出错：{e}")
         return None
 
 
@@ -1582,9 +1591,9 @@ def main():
     """
     主函数：加载分析结果，合并数据，生成报关单
     """
-    print("=" * 60)
-    print("报关单生成器")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("报关单生成器")
+    logger.info("=" * 60)
     
     parser = argparse.ArgumentParser(description="报关单生成器")
     parser.add_argument(
@@ -1609,50 +1618,50 @@ def main():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         args.template_path = os.path.join(script_dir, 'assets', '报关单.xlsx')
     
-    print(f"分析结果文件：{args.analysis_results}")
-    print(f"输出目录：{args.output_dir}")
-    print(f"模板文件：{args.template_path}")
-    print()
+    logger.info(f"分析结果文件：{args.analysis_results}")
+    logger.info(f"输出目录：{args.output_dir}")
+    logger.info(f"模板文件：{args.template_path}")
+    logger.info("")
 
     # 加载分析结果
-    print("正在加载分析结果...")
+    logger.info("正在加载分析结果...")
     analysis_results = load_analysis_results(args.analysis_results)
     if not analysis_results:
-        print("错误：无法加载分析结果文件")
+        logger.error("错误：无法加载分析结果文件")
         return 1
 
     # 验证数据格式
-    print("正在验证数据格式...")
+    logger.info("正在验证数据格式...")
     if not isinstance(analysis_results, list):
-        print("错误：分析结果必须是数组格式")
+        logger.error("错误：分析结果必须是数组格式")
         return 1
     
     for i, result in enumerate(analysis_results):
         if not isinstance(result, dict):
-            print(f"错误：第 {i} 个元素不是字典")
+            logger.error(f"错误：第 {i} 个元素不是字典")
             return 1
         if 'guid' not in result:
-            print(f"错误：第 {i} 个元素缺少 'guid' 字段")
+            logger.error(f"错误：第 {i} 个元素缺少 'guid' 字段")
             return 1
         if 'analysis' not in result:
-            print(f"错误：第 {i} 个元素缺少 'analysis' 字段")
+            logger.error(f"错误：第 {i} 个元素缺少 'analysis' 字段")
             return 1
         if not isinstance(result['analysis'], dict):
-            print(f"错误：第 {i} 个元素的 'analysis' 字段不是字典")
+            logger.error(f"错误：第 {i} 个元素的 'analysis' 字段不是字典")
             return 1
     
-    print(f"验证通过，共 {len(analysis_results)} 个单证")
-    print()
+    logger.info(f"验证通过，共 {len(analysis_results)} 个单证")
+    logger.info("")
 
     # 合并数据
-    print("正在合并数据...")
+    logger.info("正在合并数据...")
     merged_data, guid_to_business_type = merge_json_objects_with_guid(analysis_results)
-    print("数据合并完成")
-    print()
+    logger.info("数据合并完成")
+    logger.info("")
 
     # 查询产品信息
     if 'DecMessage' in merged_data and 'DecLists' in merged_data['DecMessage']:
-        print("正在查询产品信息...")
+        logger.info("正在查询产品信息...")
         dec_list = merged_data['DecMessage']['DecLists'].get('DecList', [])
         for item in dec_list:
             manufacturer = None
@@ -1678,11 +1687,11 @@ def main():
             if english_desc:
                 product_info = query_product_info(manufacturer, english_desc)
                 if product_info:
-                    print(f"  找到产品：{product_info.get('品名', '未知')}")
-        print()
+                    logger.info(f"  找到产品：{product_info.get('品名', '未知')}")
+        logger.info("")
 
     # 生成 Excel 文件
-    print("正在生成报关单 Excel...")
+    logger.info("正在生成报关单 Excel...")
     excel_path = fill_declaration_excel(
         args.template_path,
         merged_data,
@@ -1691,17 +1700,17 @@ def main():
     )
 
     if excel_path:
-        print()
-        print("=" * 60)
-        print(f"报关单生成成功！")
-        print(f"文件路径：{excel_path}")
-        print("=" * 60)
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info(f"报关单生成成功！")
+        logger.info(f"文件路径：{excel_path}")
+        logger.info("=" * 60)
         return 0
     else:
-        print()
-        print("=" * 60)
-        print("报关单生成失败！")
-        print("=" * 60)
+        logger.info("")
+        logger.info("=" * 60)
+        logger.error("报关单生成失败！")
+        logger.info("=" * 60)
         return 1
 
 

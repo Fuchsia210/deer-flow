@@ -2,13 +2,21 @@
 import sys
 import argparse
 import pandas as pd
+import logging
 from pathlib import Path
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 try:
     from markitdown import MarkItDown
 except ImportError:
-    print("MarkItDown 模块未安装，请先安装后运行本脚本")
+    logger.error("MarkItDown 模块未安装，请先安装后运行本脚本")
     sys.exit(1)
 
 
@@ -31,10 +39,10 @@ def convert_single_file(input_path: Path, output_dir: Path, md: MarkItDown) -> l
     
     # Excel文件特殊处理：每个Sheet单独转换
     if input_path.suffix.lower() in ['.xlsx', '.xls']:
-        print(f"处理Excel文件: {input_path.name}")
+        logger.info(f"处理Excel文件: {input_path.name}")
         excel_file = pd.ExcelFile(input_path)
         for sheet_idx, sheet_name in enumerate(excel_file.sheet_names):
-            print(f"  转换Sheet {sheet_idx + 1}/{len(excel_file.sheet_names)}: {sheet_name}")
+            logger.info(f"  转换Sheet {sheet_idx + 1}/{len(excel_file.sheet_names)}: {sheet_name}")
             df = pd.read_excel(input_path, sheet_name=sheet_name)
             md_content = f"# Sheet: {sheet_name}\n\n"
             md_content += df.to_markdown(index=False)
@@ -47,16 +55,16 @@ def convert_single_file(input_path: Path, output_dir: Path, md: MarkItDown) -> l
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(md_content, encoding='utf-8')
             saved_files.append(str(output_path.resolve()))
-            print(f"  已保存: {output_filename}")
+            logger.info(f"  已保存: {output_filename}")
     else:
         # 其他文件使用MarkItDown转换
-        print(f"处理文件: {input_path.name}")
+        logger.info(f"处理文件: {input_path.name}")
         result = md.convert(str(input_path))
         output_path = output_dir / f"{input_path.stem}.md"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(result.text_content, encoding='utf-8')
         saved_files.append(str(output_path.resolve()))
-        print(f"  已保存: {output_path.name}")
+        logger.info(f"  已保存: {output_path.name}")
     
     return saved_files
 
@@ -85,28 +93,28 @@ def convert_directory(input_dir: Path, output_dir: Path) -> dict:
     
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    print(f"开始批量转换目录: {input_dir}")
-    print(f"输出目录: {output_dir}")
-    
+
+    logger.info(f"开始批量转换目录: {input_dir}")
+    logger.info(f"输出目录: {output_dir}")
+
     # 遍历目录下的所有文件
     file_count = 0
     for file_path in input_dir.iterdir():
         if file_path.is_file() and file_path.suffix.lower() in supported_exts:
             file_count += 1
-    
-    print(f"找到 {file_count} 个支持的文件")
-    print("-" * 60)
-    
+
+    logger.info(f"找到 {file_count} 个支持的文件")
+    logger.info("-" * 60)
+
     # 逐个转换文件
     for idx, file_path in enumerate(input_dir.iterdir(), 1):
         if file_path.is_file() and file_path.suffix.lower() in supported_exts:
-            print(f"[{idx}/{file_count}] 处理: {file_path.name}")
+            logger.info(f"[{idx}/{file_count}] 处理: {file_path.name}")
             saved = convert_single_file(file_path, output_dir, md)
             all_saved.extend(saved)
-    
-    print("-" * 60)
-    print(f"转换完成！共转换 {len(all_saved)} 个文件")
+
+    logger.info("-" * 60)
+    logger.info(f"转换完成！共转换 {len(all_saved)} 个文件")
     
     return {
         "total_converted": len(all_saved),
@@ -128,11 +136,11 @@ def main():
     input_path = Path(args.input_path)
     
     if not input_path.exists():
-        print(f"错误：输入路径不存在: {input_path}")
+        logger.error(f"错误：输入路径不存在: {input_path}")
         sys.exit(1)
-    
+
     md = MarkItDown()
-    
+
     # 单个文件转换
     if input_path.is_file():
         if args.output:
@@ -145,7 +153,7 @@ def main():
         
         saved = convert_single_file(input_path, output_dir, md)
         if saved:
-            print(f"转换成功！输出文件: {saved[0]}")
+            logger.info(f"转换成功！输出文件: {saved[0]}")
             return saved[0]
         else:
             return None

@@ -255,6 +255,17 @@ def _build_middlewares(
     """
     resolved_app_config = app_config or get_app_config()
     middlewares = build_lead_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
+    
+    # Add skill logging middleware if enabled in config
+    try:
+        from deerflow.agents.middlewares.skill_logging_middleware import SkillLoggingMiddleware
+        # Check if skill logging is enabled
+        skill_logging_config = getattr(resolved_app_config, "skill_logging", None)
+        skill_logging_enabled = skill_logging_config and skill_logging_config.enabled if skill_logging_config else True
+        if skill_logging_enabled:
+            middlewares.append(SkillLoggingMiddleware(app_config=resolved_app_config))
+    except Exception as e:
+        logger.debug(f"Failed to initialize skill logging middleware: {e}")
 
     # Add summarization middleware if enabled
     summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)

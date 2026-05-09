@@ -3,7 +3,16 @@ import os
 import sys
 import argparse
 import json
+import logging
 from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 
 def get_excel_sheets(file_path):
@@ -165,25 +174,25 @@ def main():
 
     args = parser.parse_args()
     
-    print(f"开始检查路径: {args.path}")
+    logger.info(f"开始检查路径: {args.path}")
     result = check_files(args.path)
-    print(f"检查完成，共发现 {result['total_count']} 个文件/Sheet")
+    logger.info(f"检查完成，共发现 {result['total_count']} 个文件/Sheet")
     
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        logger.info(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print("=" * 60)
-        print("文件检查结果")
-        print("=" * 60)
-        print(f"总文件数: {result['total_count']}")
-        print(f"Excel: {result['file_types']['excel']}")
-        print(f"Word: {result['file_types']['word']}")
-        print(f"Txt: {result['file_types']['txt']}")
-        print(f"其他: {result['file_types']['other']}")
-        print("\n文件列表:")
+        logger.info("=" * 60)
+        logger.info("文件检查结果")
+        logger.info("=" * 60)
+        logger.info(f"总文件数: {result['total_count']}")
+        logger.info(f"Excel: {result['file_types']['excel']}")
+        logger.info(f"Word: {result['file_types']['word']}")
+        logger.info(f"Txt: {result['file_types']['txt']}")
+        logger.info(f"其他: {result['file_types']['other']}")
+        logger.info("\n文件列表:")
         for i, file_item in enumerate(result['files'], 1):
-            print(f"  {i}. {file_item['name']} ({file_item['type']})")
-        print("=" * 60)
+            logger.info(f"  {i}. {file_item['name']} ({file_item['type']})")
+        logger.info("=" * 60)
 
 
 if __name__ == "__main__":
