@@ -31,6 +31,13 @@ else
     BUILD_ARGS="--build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"
 fi
 
+MARKITDOWN_SOURCE="${MARKITDOWN_SOURCE:-/home/ayl13/markitdown}"
+if [ -d "$MARKITDOWN_SOURCE" ]; then
+    echo "Using local markitdown source: $MARKITDOWN_SOURCE"
+    mkdir -p "$SCRIPT_DIR/markitdown-src"
+    cp -r "$MARKITDOWN_SOURCE"/* "$SCRIPT_DIR/markitdown-src/"
+fi
+
 echo ""
 echo "Building Docker image..."
 docker build $BUILD_ARGS -t "$IMAGE_NAME" "$SCRIPT_DIR"
@@ -69,6 +76,8 @@ docker run --rm "$IMAGE_NAME" python -c "import fuzzywuzzy; print('  ✓ fuzzywu
 docker run --rm "$IMAGE_NAME" python -c "import lancedb; print('  ✓ lancedb')" 2>/dev/null || echo "  ⚠ lancedb not available"
 docker run --rm "$IMAGE_NAME" python -c "import sentence_transformers; print('  ✓ sentence-transformers')" 2>/dev/null || echo "  ⚠ sentence-transformers not available"
 docker run --rm "$IMAGE_NAME" python -c "import torch; print('  ✓ torch')" 2>/dev/null || echo "  ⚠ torch not available"
+docker run --rm "$IMAGE_NAME" python -c "from markitdown import MarkItDown; print('  ✓ markitdown')" 2>/dev/null || echo "  ⚠ markitdown not available"
+docker run --rm "$IMAGE_NAME" python -c "import xlrd; print('  ✓ xlrd')" 2>/dev/null || echo "  ⚠ xlrd not available"
 
 echo ""
 echo "Done!"

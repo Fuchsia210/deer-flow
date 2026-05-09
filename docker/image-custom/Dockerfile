@@ -20,7 +20,14 @@ RUN echo "Installing pre-cached Python packages for hospital-report and declarat
     lancedb==0.30.2 \
     sentence-transformers==5.4.1 \
     torch==2.11.0 \
+    xlrd>=2.0.0 \
     && echo "Pre-cached packages installed successfully"
+
+COPY markitdown-src /home/ayl13/markitdown
+
+RUN echo "Installing markitdown from local source..." && \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -e /home/ayl13/markitdown/packages/markitdown[all] && \
+    echo "Markitdown installed successfully"
 
 RUN echo "Pre-downloading sentence transformer model (using HF mirror)..." && \
     python -c "from sentence_transformers import SentenceTransformer; model = SentenceTransformer('all-MiniLM-L6-v2'); print('Model downloaded successfully')" && \

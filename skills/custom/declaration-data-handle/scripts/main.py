@@ -8,9 +8,11 @@ import re
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
+
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+
 from fuzzywuzzy import fuzz
 
-# 尝试导入 Excel 处理库
 try:
     import openpyxl
     from openpyxl.styles import Font
@@ -19,15 +21,15 @@ try:
 except ImportError:
     OPENPYXL_AVAILABLE = False
 
-# 尝试导入向量数据库
 try:
     import lancedb
     from sentence_transformers import SentenceTransformer
     LANCEDB_AVAILABLE = True
-    # 预加载模型
     _embedding_model = None
 except ImportError:
     LANCEDB_AVAILABLE = False
+
+from utils.logging import log_message, set_debug_mode
 
 # 预编译正则表达式，提高性能
 PLACEHOLDER_PATTERN = re.compile(r'\{([^}]+)\}')
@@ -190,21 +192,31 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
     返回:
         查询结果字典，格式为 {'ids': [...], 'documents': [...], 'metadatas': [...], 'distances': [...]}
     """
+    log_message(f"[query_from_db] 连接向量数据库: {persist_directory}")
     db = lancedb.connect(persist_directory)
     
     try:
         table = db.open_table(collection_name)
+        log_message(f"[query_from_db] 成功打开表: '{collection_name}'")
     except Exception as e:
-        print(f"Error: Table '{collection_name}' not found.")
+        log_message(f"[query_from_db] 错误: 表 '{collection_name}' 不存在或无法打开 - {str(e)}", "ERROR")
         return None
+    
+    log_message(f"[query_from_db] 查询参数 - query_text: '{query_text}', n_results: {n_results}")
+    log_message(f"[query_from_db] 过滤条件: {filter_conditions if filter_conditions else '无'}")
+    log_message(f"[query_from_db] 严格匹配字段: {strict_match_fields if strict_match_fields else '无'}")
     
     # 如果有过滤条件，先进行过滤
     if filter_conditions and len(filter_conditions) > 0:
+        log_message("[query_from_db] 开始应用过滤条件...")
         # 获取所有数据进行过滤
         all_items = table.to_pandas()
+        total_count = len(all_items)
+        log_message(f"[query_from_db] 全表数据总量: {total_count} 条")
+        
         filtered_items = []
         
-        for _, row in all_items.iterrows():
+        for idx, (_, row) in enumerate(all_items.iterrows()):
             match = True
             for key, value in filter_conditions.items():
                 meta_value = str(row.get(key, ''))
@@ -218,17 +230,23 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
             if match:
                 filtered_items.append(row)
         
+        log_message(f"[query_from_db] 过滤后剩余数据: {len(filtered_items)} 条")
+        
         if filtered_items:
             # 如果有查询文本，进行向量搜索
             if query_text:
+                log_message("[query_from_db] 开始向量搜索...")
                 model = get_embedding_model()
                 query_vector = model.encode(query_text).tolist()
+                log_message(f"[query_from_db] 查询向量维度: {len(query_vector)}")
                 
                 # 使用LanceDB的向量搜索
                 results_df = table.search(query_vector).limit(n_results).to_pandas()
+                log_message(f"[query_from_db] 向量搜索原始结果: {len(results_df)} 条")
                 
                 # 应用过滤条件
                 if strict_match_fields and filter_conditions:
+                    log_message("[query_from_db] 对向量搜索结果二次应用过滤条件...")
                     mask = []
                     for _, row in results_df.iterrows():
                         item_match = True
@@ -240,6 +258,7 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
                                     break
                         mask.append(item_match)
                     results_df = results_df[mask]
+                    log_message(f"[query_from_db] 二次过滤后剩余结果: {len(results_df)} 条")
                 
                 # 转换为ChromaDB兼容格式
                 ids = results_df['id'].tolist()
@@ -257,8 +276,10 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
                     'metadatas': [metadatas],
                     'distances': [distances] if distances else None
                 }
+                log_message(f"[query_from_db] 返回最终结果: {len(ids)} 条")
             else:
                 # 没有查询文本，直接返回所有过滤结果
+                log_message("[query_from_db] 无查询文本，直接返回过滤结果")
                 ids = [item['id'] for item in filtered_items]
                 documents = [item['document'] for item in filtered_items]
                 metadatas = []
@@ -272,12 +293,14 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
                     'metadatas': [metadatas],
                     'distances': None
                 }
+                log_message(f"[query_from_db] 返回过滤结果: {len(ids)} 条")
         else:
-            print("  No items found matching filter criteria. Searching all items...")
+            log_message("[query_from_db] 未找到匹配过滤条件的条目，将搜索所有项目...")
             if query_text:
                 model = get_embedding_model()
                 query_vector = model.encode(query_text).tolist()
                 results_df = table.search(query_vector).limit(n_results).to_pandas()
+                log_message(f"[query_from_db] 全量向量搜索结果: {len(results_df)} 条")
                 
                 ids = results_df['id'].tolist()
                 documents = results_df['document'].tolist()
@@ -297,10 +320,13 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
                 results = None
     else:
         # 没有过滤条件，直接查询
+        log_message("[query_from_db] 无过滤条件，直接向量搜索")
         if query_text:
             model = get_embedding_model()
             query_vector = model.encode(query_text).tolist()
+            log_message(f"[query_from_db] 查询向量维度: {len(query_vector)}")
             results_df = table.search(query_vector).limit(n_results).to_pandas()
+            log_message(f"[query_from_db] 向量搜索结果: {len(results_df)} 条")
             
             ids = results_df['id'].tolist()
             documents = results_df['document'].tolist()
@@ -317,22 +343,13 @@ def query_from_db(persist_directory, collection_name, query_text=None, filter_co
                 'distances': [distances] if distances else None
             }
         else:
+            log_message("[query_from_db] 无查询文本且无过滤条件，返回 None")
             results = None
     
     return results
 
 
-def log_message(message, level="INFO"):
-    """记录日志信息"""
-    try:
-        import pandas as pd
-        timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-    except ImportError:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    output = f"[{timestamp}] [{level}] {message}"
-    print(output)
-
+_debug_mode = False
 
 def load_analysis_results(analysis_file=None, analysis_json=None):
     """加载分析结果"""
@@ -358,40 +375,52 @@ def load_analysis_results(analysis_file=None, analysis_json=None):
 
 def merge_json_objects_with_guid(json_list_with_guid):
     """合并多个带 GUID 的 JSON 对象"""
+    log_message("开始合并带 GUID 的 JSON 对象")
     if not json_list_with_guid:
+        log_message("输入数据为空，返回空结果")
         return {}, {}
 
+    log_message(f"待合并数据总数: {len(json_list_with_guid)}")
+    
     # 第一步：先区分发票、企业默认值和其他单证
     invoice_data = None
     default_data = None
     other_data_list = []
 
-    for data_with_guid in json_list_with_guid:
+    for idx, data_with_guid in enumerate(json_list_with_guid):
         json_data = data_with_guid.get('analysis', {}) or data_with_guid
         file_guid = data_with_guid.get('guid', str(uuid.uuid4()))
         file_business_type = json_data.get('FileBusinessType', '')
+        file_name = json_data.get('FileName', f'未知文件_{idx+1}')
+        log_message(f"处理文件 {idx+1}: FileName={file_name}, FileBusinessType={file_business_type}, guid={file_guid}")
 
         if file_business_type == '发票':
             invoice_data = {'json': json_data, 'guid': file_guid}
+            log_message("已设置发票为商品基准")
         elif file_business_type == '企业默认值':
             default_data = {'json': json_data, 'guid': file_guid}
+            log_message("已设置企业默认值，将应用到所有商品")
         else:
             other_data_list.append({'json': json_data, 'guid': file_guid})
+            log_message("该文件归类为其他单证")
 
     # 第二步：收集所有 DecList 数据
     dec_list_groups = {}
     existing_items = []
     group_invoice_gno = {}
+    log_message("开始收集 DecList 商品数据")
 
     # 先处理发票，建立基准
     if invoice_data:
         json_data = invoice_data['json']
         file_guid = invoice_data['guid']
+        log_message("从发票建立商品基准数据")
 
         if 'DecMessage' in json_data and 'DecLists' in json_data['DecMessage']:
             dec_list = json_data['DecMessage']['DecLists'].get('DecList', [])
+            log_message(f"发票商品列表数量: {len(dec_list)}")
             if isinstance(dec_list, list):
-                for item in dec_list:
+                for item_idx, item in enumerate(dec_list):
                     if isinstance(item, dict):
                         description = item.get('Description', '')
                         qty1 = item.get('Qty1')
@@ -412,18 +441,23 @@ def merge_json_objects_with_guid(json_list_with_guid):
                                 'guid': file_guid,
                                 'item': item
                             })
+                            log_message(f"发票商品 {item_idx+1}: Description='{description}', GNo={gno}, Qty1={qty1}")
 
     # 再处理其他单证，只根据 Description 匹配
-    for data_with_guid in other_data_list:
+    log_message(f"开始处理其他单证商品数据，共 {len(other_data_list)} 份单证")
+    for data_idx, data_with_guid in enumerate(other_data_list):
         json_data = data_with_guid['json']
         file_guid = data_with_guid['guid']
+        log_message(f"处理第 {data_idx+1} 份其他单证")
 
         if 'DecMessage' in json_data and 'DecLists' in json_data['DecMessage']:
             dec_list = json_data['DecMessage']['DecLists'].get('DecList', [])
+            log_message(f"该单证商品列表数量: {len(dec_list)}")
             if isinstance(dec_list, list):
-                for item in dec_list:
+                for item_idx, item in enumerate(dec_list):
                     if isinstance(item, dict):
                         description = item.get('Description', '')
+                        log_message(f"处理商品 {item_idx+1}: Description='{description}'")
                         if description:
                             # 查找匹配项
                             best_match, score = find_best_match_by_description(
@@ -438,6 +472,7 @@ def merge_json_objects_with_guid(json_list_with_guid):
                                 qty1 = item.get('Qty1')
                                 qty1_str = str(qty1) if qty1 is not None else 'None'
                                 group_key = f"{description}|{qty1_str}"
+                                log_message(f"无发票基准，创建新商品分组: '{group_key}'")
                                 existing_items.append({
                                     'desc': description,
                                     'qty1': qty1,
@@ -455,19 +490,24 @@ def merge_json_objects_with_guid(json_list_with_guid):
                             })
 
     # 第三步：普通合并逻辑（不处理 DecLists）
+    log_message("开始普通合并逻辑（跳过 DecLists，递归合并其他字段）")
     result = {}
     guid_to_business_type = {}
 
-    def merge_recursive(target, source, source_guid):
+    def merge_recursive(target, source, source_guid, path="root"):
+        log_message(f"递归合并: path={path}, guid={source_guid}")
         if isinstance(source, dict):
             for key, value in source.items():
+                current_path = f"{path}.{key}"
                 # 跳过 DecLists，单独处理
                 if key == 'DecLists':
+                    log_message(f"跳过 DecLists 字段（将单独处理）: {current_path}")
                     continue
 
                 # 记录业务类型
                 if key == 'FileBusinessType' and source_guid:
                     guid_to_business_type[source_guid] = value
+                    log_message(f"记录业务类型映射: {source_guid} -> {value}")
                     # 只保存第一个非空值
                     if key not in target and value and value != '':
                         target[key] = value
@@ -479,37 +519,42 @@ def merge_json_objects_with_guid(json_list_with_guid):
                 if isinstance(value, dict):
                     if not isinstance(target[key], dict):
                         target[key] = {}
-                    merge_recursive(target[key], value, source_guid)
+                    merge_recursive(target[key], value, source_guid, current_path)
                 elif isinstance(value, list):
                     if not isinstance(target[key], list):
                         target[key] = []
-                    for list_item in value:
+                    for idx_list, list_item in enumerate(value):
+                        list_path = f"{current_path}[{idx_list}]"
                         if isinstance(list_item, dict):
                             found = False
                             for existing_item in target[key]:
                                 if isinstance(existing_item, dict):
-                                    merge_recursive(existing_item, list_item, source_guid)
+                                    merge_recursive(existing_item, list_item, source_guid, list_path)
                                     found = True
                                     break
                             if not found:
                                 new_item = {}
-                                merge_recursive(new_item, list_item, source_guid)
+                                merge_recursive(new_item, list_item, source_guid, list_path)
                                 target[key].append(new_item)
                         else:
                             entry = {'guid': source_guid, 'value': list_item}
                             if entry not in target[key]:
+                                log_message(f"添加列表值: path={list_path}, value={list_item}, guid={source_guid}")
                                 target[key].append(entry)
                 else:
                     if not isinstance(target[key], list):
                         target[key] = []
                     entry = {'guid': source_guid, 'value': value}
                     if entry not in target[key]:
+                        log_message(f"添加字段值: path={current_path}, value={value}, guid={source_guid}")
                         target[key].append(entry)
+        log_message(f"递归合并完成: path={path}")
 
     # 合并所有数据（跳过 DecLists）
-    for data_with_guid in json_list_with_guid:
+    for data_idx, data_with_guid in enumerate(json_list_with_guid):
         json_data = data_with_guid.get('analysis', {}) or data_with_guid
         file_guid = data_with_guid.get('guid', str(uuid.uuid4()))
+        log_message(f"递归合并第 {data_idx+1} 份文件数据: guid={file_guid}")
         merge_recursive(result, json_data, file_guid)
 
     # 第四步：构建新的 DecLists
@@ -685,21 +730,31 @@ def get_value_from_merged_data(merged_data, field_path):
 
 def query_product_info(manufacturer=None, english_desc=None, script_dir=None):
     """从向量数据库查询产品信息"""
+    log_message("-" * 50)
+    log_message("开始产品向量数据库查询")
+    log_message(f"输入参数 - manufacturer: {manufacturer}, english_desc: {english_desc}")
+    
     if not LANCEDB_AVAILABLE:
-        log_message("向量数据库不可用，跳过产品查询", "WARNING")
+        log_message("向量数据库依赖库未安装（lancedb 或 sentence-transformers），跳过产品查询", "WARNING")
+        log_message("-" * 50)
         return None
 
     if not script_dir:
         script_dir = os.path.dirname(os.path.abspath(__file__))
 
     persist_directory = os.path.join(script_dir, 'lance_db')
+    log_message(f"向量数据库路径: {persist_directory}")
 
     if not os.path.exists(persist_directory):
         log_message(f"向量数据库目录不存在: {persist_directory}", "WARNING")
+        log_message("-" * 50)
         return None
 
     try:
         query_text = english_desc
+        log_message(f"查询文本: '{query_text}'")
+        log_message(f"制造企业过滤条件: {manufacturer if manufacturer else '无'}")
+        
         results = query_from_db(
             persist_directory=persist_directory,
             collection_name='product_library',
@@ -708,31 +763,56 @@ def query_product_info(manufacturer=None, english_desc=None, script_dir=None):
             strict_match_fields=['制造企业'] if manufacturer else None
         )
 
+        log_message(f"原始查询结果: {'成功' if results else '无结果'}")
+        
+        if results:
+            total_ids = len(results.get('ids', [[]])[0]) if results.get('ids') else 0
+            log_message(f"返回结果总数: {total_ids} 条")
+
         if results and english_desc:
+            log_message("开始按关键词匹配重新排序结果...")
             results = reorder_results_with_keyword_match(
                 results, english_desc, ['英文描述']
             )
+            log_message("关键词匹配重排序完成")
 
         if results and results.get('ids') and len(results['ids'][0]) > 0:
             best_meta = None
             best_distance = float('inf')
 
+            log_message("开始筛选符合距离阈值（< 1.2）的候选产品...")
+            
             for i in range(len(results['ids'][0])):
                 distance = results['distances'][0][i] if results.get('distances') and len(results['distances'][0]) > i else None
                 meta = results['metadatas'][0][i] if results.get('metadatas') and len(results['metadatas'][0]) > i else None
 
+                distance_str = f"{distance:.4f}" if distance is not None and isinstance(distance, float) else 'N/A'
+                meta_str = str(meta)[:150] if meta else '无元数据'
+                log_message(f"第 {i+1} 条结果 - 距离: {distance_str}, 元数据摘要: {meta_str}")
+
                 if distance is not None and distance < 1.2 and distance < best_distance:
                     best_distance = distance
                     best_meta = meta
-                    log_message(f"候选匹配 - 距离: {distance:.4f}, 元数据: {meta}")
+                    current_best_str = f"{best_distance:.4f}" if best_distance != float('inf') else 'inf'
+                    log_message(f"→ 更新最佳匹配（新距离 {distance:.4f} < 当前最佳 {current_best_str}）")
 
             if best_meta:
-                log_message(f"找到最佳匹配产品: {best_meta}")
+                log_message(f"✓ 最终选中最佳产品 - 距离: {best_distance:.4f}")
+                log_message(f"✓ 完整产品信息: {best_meta}")
+                log_message("-" * 50)
                 return best_meta
+            else:
+                log_message("未找到距离 < 1.2 的合格产品，放弃匹配")
+        else:
+            log_message("向量数据库未返回任何结果")
 
+        log_message("-" * 50)
         return None
     except Exception as e:
-        log_message(f"产品查询失败: {e}", "ERROR")
+        log_message(f"产品查询过程中发生异常: {e}", "ERROR")
+        import traceback
+        log_message(f"异常堆栈信息:\n{traceback.format_exc()}", "ERROR")
+        log_message("-" * 50)
         return None
 
 
@@ -1620,8 +1700,18 @@ def main():
         "--template-path",
         help="报关单模板路径"
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="启用debug模式，实时保存日志到文件"
+    )
 
     args = parser.parse_args()
+    
+    # 设置debug模式
+    set_debug_mode(args.debug)
+    if args.debug:
+        print("[DEBUG] Debug模式已启用，日志将保存到文件")
 
     # 设置默认模板路径
     if not args.template_path:
@@ -1638,16 +1728,26 @@ def main():
         log_message("无法加载分析结果，退出", "ERROR")
         return 1
 
-    log_message(f"已加载 {len(analysis_results) if isinstance(analysis_results, list) else 1} 个分析结果")
-
-    # 确保是列表格式
+    # 严格校验：只接受带外层包装的数组格式
     if not isinstance(analysis_results, list):
-        analysis_results = [analysis_results]
-
-    # 为每个结果添加 GUID
+        log_message("错误：输入必须是数组格式", "ERROR")
+        return 1
+    
     for i, result in enumerate(analysis_results):
+        if not isinstance(result, dict):
+            log_message(f"错误：第 {i+1} 个元素不是字典类型", "ERROR")
+            return 1
         if 'guid' not in result:
-            result['guid'] = str(uuid.uuid4())
+            log_message(f"错误：第 {i+1} 个元素缺少必需字段 'guid'", "ERROR")
+            return 1
+        if 'analysis' not in result:
+            log_message(f"错误：第 {i+1} 个元素缺少必需字段 'analysis'", "ERROR")
+            return 1
+        if not isinstance(result['analysis'], dict):
+            log_message(f"错误：第 {i+1} 个元素的 'analysis' 字段必须是字典类型", "ERROR")
+            return 1
+
+    log_message(f"已加载 {len(analysis_results)} 个分析结果")
 
     # 合并数据
     log_message("正在合并数据...")

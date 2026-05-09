@@ -34,6 +34,12 @@ docker/image-custom/
 - `lxml` - XML/HTML处理
 - `pandas` - 数据处理
 
+### 文档转换依赖 (declaration-data-handle)
+
+- `markitdown[all]` - 将各类文档（PDF、Word、Excel、图片等）转换为 Markdown（需安装 `[all]` 以支持所有格式）
+- `xlrd` - 读取旧版 Excel 文件 (.xls)
+- `xlwt` / `openpyxl` - Excel 文件写入
+
 ### 向量数据库依赖 (declaration-data-handle)
 
 - `lancedb` - 向量数据库
@@ -53,15 +59,13 @@ docker/image-custom/
 cd /home/ayl13/deer-flow/docker/image-custom
 
 # 使用清华镜像源构建（推荐国内用户）
-docker build -t deer-flow-sandbox:custom \
-  --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-  .
+./build.sh
 
-# 或使用阿里云镜像源
-docker build -t deer-flow-sandbox:custom \
-  --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
-  .
+# 或手动指定 markitdown 源码路径
+MARKITDOWN_SOURCE=/home/ayl13/markitdown ./build.sh
 ```
+
+**注意**：构建脚本会自动从 `/home/ayl13/markitdown` 复制源码到镜像中，无需手动下载 markitdown。
 
 ### 步骤2：更新 config.yaml
 
